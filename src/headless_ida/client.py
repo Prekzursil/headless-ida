@@ -72,25 +72,34 @@ class HeadlessIda:
 
     def __init__(
         self,
-        ida_dir,
-        binary_path,
+        ida_dir=None,
+        binary_path=None,
         override_import=True,
         bits=64,
         ftype: Optional[str] = None,
         processor: Optional[str] = None,
     ) -> None:
-        self.backend_type, self.ida_path = resolve_ida_path(ida_dir, bits)
         self.cleaned_up = False
         atexit.register(self.clean_up)
 
+        if ida_dir is None:
+            # Remote mode (HeadlessIdaRemote): no local IDA backend to load.
+            self.backend_type = None
+            self.ida_path = None
+            return
+
+        self.backend_type, self.ida_path = resolve_ida_path(ida_dir, bits)
+
         if self.backend_type == IDABackendType.IDALIB:
-            return self._idalib_backend(
+            self._idalib_backend(
                 self.ida_path, binary_path, override_import, ftype=ftype, processor=processor
             )
         elif self.backend_type in [IDABackendType.IDA, IDABackendType.IDAT]:
-            return self._ida_backend(
+            self._ida_backend(
                 self.ida_path, binary_path, override_import, ftype=ftype, processor=processor
             )
+        else:
+            raise RuntimeError(f"Unknown IDA backend type: {self.backend_type}")
 
     def _idalib_backend(
         self,
@@ -161,9 +170,8 @@ class HeadlessIda:
         server_path = os.path.join(
             os.path.realpath(os.path.dirname(__file__)), "ida_script.py"
         )
-        port = 8000
         with socket.socket() as s:
-            s.bind(("", 0))
+            s.bind(("127.0.0.1", 0))
             port = s.getsockname()[1]
         os.environ["PYTHONPATH"] = (
             os.pathsep.join(site.getsitepackages() + [site.getusersitepackages()])
@@ -248,8 +256,7 @@ class HeadlessIda:
 
 class HeadlessIdaRemote(HeadlessIda):
     def __init__(self, host, port, binary_path, override_import=True, ftype=None, processor=None):
-        self.cleaned_up = False
-        atexit.register(self.clean_up)
+        super().__init__()
         self.conn = rpyc.connect(
             host,
             int(port),
