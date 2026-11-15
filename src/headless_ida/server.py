@@ -1,7 +1,6 @@
 import ctypes
 import importlib
 import os
-import shutil
 import site
 import socket
 import subprocess
@@ -26,9 +25,11 @@ def HeadlessIdaServer(idat_path):
     class _HeadlessIdaServer(rpyc.Service):
         def exposed_init(self, binary, ftype=None, processor=None):
             if backend_type == IDABackendType.IDALIB:
-                return self._idalib_backend(ida_path, binary, ftype=ftype, processor=processor)
+                self._idalib_backend(ida_path, binary, ftype=ftype, processor=processor)
             elif backend_type in [IDABackendType.IDA, IDABackendType.IDAT]:
-                return self._ida_backend(ida_path, binary, ftype=ftype, processor=processor)
+                self._ida_backend(ida_path, binary, ftype=ftype, processor=processor)
+            else:
+                raise RuntimeError(f"Unknown IDA backend type: {backend_type}")
 
         def _idalib_backend(self, idalib_path, binary, ftype=None, processor=None):
             # This should never be reached due to the check in HeadlessIdaServer()
@@ -98,9 +99,8 @@ def HeadlessIdaServer(idat_path):
             server_path = os.path.join(
                 os.path.realpath(os.path.dirname(__file__)), "ida_script.py"
             )
-            port = 8000
             with socket.socket() as s:
-                s.bind(("", 0))
+                s.bind(("127.0.0.1", 0))
                 port = s.getsockname()[1]
             os.environ["PYTHONPATH"] = (
                 os.pathsep.join(site.getsitepackages() + [site.getusersitepackages()])
@@ -145,7 +145,7 @@ def HeadlessIdaServer(idat_path):
                         service=ForwardIO,
                         config={"sync_request_timeout": 60 * 60 * 24},
                     )
-                except:
+                except OSError:
                     continue
                 break
 
